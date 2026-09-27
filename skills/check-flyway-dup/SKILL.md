@@ -1,10 +1,10 @@
 ---
 name: check-flyway-dup
-description: Check new or modified Flyway migrations for version conflicts against the DB, git remote, and local files
+description: Check uncommitted or recently committed Flyway migrations for version conflicts against the DB, git remote, and local files
 argument-hint: "[env] [service]"
 ---
 
-Check **new or modified** Flyway migrations in the current service for version conflicts. This skill focuses on the code that was just generated or changed, not on old migrations whose DB script names may differ for historical reasons. It always reports first and only renames files after you explicitly approve.
+Check **new, modified, or recently committed** Flyway migrations in the current service for version conflicts. This skill first checks uncommitted work and, when none exists, offers relevant migrations from recent commits on the checked-out branch. It does not scan all old migrations unless explicitly requested. It always reports first and only renames files after you explicitly approve.
 
 1. Identify the target service:
    - If a service name is provided as an argument (e.g. `/check-flyway-dup dev policy-management-command-service`), use it directly.
@@ -27,9 +27,26 @@ Check **new or modified** Flyway migrations in the current service for version c
      - (For `policy-management-query-service`, this is expected because Flyway is disabled there.)
 
 4. Identify candidate files (the code that is actually being worked on):
-   - Run `git status --short src/main/resources/db/migration/`.
-   - Candidate files are those with statuses `??` (untracked), `A` (added), `M` (modified), or `R`/`C` (renamed/copied) in the migration directory.
-   - If git is not available or `git status` shows no migrations, stop and ask the user: "No new or modified migrations detected. Run a full scan of all migrations instead? (yes/no)".
+   - First run `git status --short src/main/resources/db/migration/`.
+   - Uncommitted candidate files are those with statuses `??` (untracked), `A` (added), `M` (modified), or `R`/`C` (renamed/copied) in the migration directory.
+   - If uncommitted migration candidates are found, use them and continue to step 5.
+   - If no uncommitted migration candidates are found:
+     - Determine the current checked-out branch with `git branch --show-current`.
+     - List up to 10 recent non-merge commits from the current branch history that changed the migration directory:
+       ```bash
+       git log --no-merges -10 --date=short --pretty=format:"%h%x09%ad%x09%s" -- src/main/resources/db/migration/
+       ```
+     - For each listed commit, collect its changed migration filenames and statuses with:
+       ```bash
+       git diff-tree --no-commit-id --name-status -r <commit> -- src/main/resources/db/migration/
+       ```
+     - Show the user the current branch plus each commit's hash, date, subject, and changed migration filenames.
+     - Ask: "No uncommitted migrations found. Check the migrations found in these recent commits? (yes/no)"
+     - Do not query the DB, scan remote refs, or perform conflict checks until the user explicitly approves.
+     - If approved, combine and de-duplicate the `A`, `M`, `R`, and `C` migration files from the displayed commits and use them as the candidate files. Ignore deleted files.
+     - If declined, or if no recent commit changed migrations, report "No new or recently committed migrations selected to check" and stop.
+   - If git is unavailable, report that candidate discovery could not be performed and stop.
+   - Never fall back to a full scan automatically. A full scan is allowed only when the user explicitly requests one.
 
 5. Extract all local versions for context:
    - For every `V<version>__<description>.sql` file in `src/main/resources/db/migration/`, parse the version string (the part after `V` and before `__`).
@@ -82,8 +99,9 @@ Check **new or modified** Flyway migrations in the current service for version c
     - DB reachable? (yes/no). If no, show the connection failure reason.
     - Git fallback result: reachable refs checked, any version found in git history/remote.
     - Table of conflicts: version | candidate filename | local duplicate? | DB script | git source | issue.
-    - If no candidate files and user did not request a full scan, report "No new or modified migrations to check" and stop.
-    - If no conflicts, report "No conflicts found in new/modified migrations" and stop.
+    - Report whether candidates came from uncommitted changes, approved recent commits, or an explicitly requested full scan.
+    - If no candidate files were selected, report "No new or recently committed migrations selected to check" and stop.
+    - If no conflicts, report "No conflicts found in the selected migrations" and stop.
 
 11. Propose fixes (do NOT apply yet):
     - Compute `nextVersion = max(all DB versions, all local versions, all git-detected versions) + 1` as a number.
@@ -98,7 +116,8 @@ Check **new or modified** Flyway migrations in the current service for version c
 Rules:
 - Never modify the Flyway history table or run any write SQL against the DB.
 - Never rename a file unless the user has explicitly approved the proposed rename.
-- Focus only on new or modified migrations; do not flag old historical DB renames as conflicts.
+- Focus only on uncommitted candidates, user-approved candidates from recent commits, or files included by an explicit full-scan request; do not flag old historical DB renames as conflicts.
+- Never run a full scan merely because no uncommitted migrations were found.
 - If the DB cannot be reached, still report local duplicate-version conflicts and git-detected conflicts for candidate files.
 - Do not print secrets (passwords, connection strings) in the output.
 - Be clear about what was checked and what could not be checked.
