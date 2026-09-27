@@ -48,8 +48,14 @@ Create focused documentation for exactly one user-supplied API, function, method
    ```text
    documentation/
    └── <feature-slug>/
-       └── README.md
+       ├── README.md
+       └── diagrams/
+           ├── 01-overview.svg
+           ├── 02-validation.svg
+           └── 03-error-handling.svg
    ```
+
+   Every feature MUST produce at least one standalone diagram file under `diagrams/` in addition to any Mermaid content in `README.md`. Prefer SVG. Use PNG only when SVG is impractical.
 
 2. Derive `<feature-slug>` from the resolved feature, not blindly from the raw input:
    - use lowercase kebab-case;
@@ -71,6 +77,7 @@ Write for developers and non-developers together:
 - Avoid a fixed empty template. Include only sections supported by the selected feature.
 - Keep source references repository-relative and attach them to the claims they support.
 - Do not paste large code blocks from the application.
+- Do not write a long prose-only document; every feature explanation must be paired with a diagram.
 
 ## README content
 
@@ -81,7 +88,7 @@ Use the following order, omitting sections that genuinely do not apply:
 3. **Who/what uses it** — actor, upstream caller, scheduled job, listener, or internal caller.
 4. **Contract** — for APIs include method/path, important headers, request, response, and meaningful status codes; for functions/features include inputs, outputs, and side effects.
 5. **How it works** — numbered end-to-end flow using real component and operation names.
-6. **Flow diagram(s)** — Mermaid diagrams following the rules below.
+6. **Flow diagram(s)** — Mermaid diagrams following the rules below. A README without at least one meaningful Mermaid diagram is incomplete.
 7. **Business rules and validation** — only meaningful rules, with resulting behavior.
 8. **Data and integrations** — reads/writes, transactions, messages/events, and external calls.
 9. **Failures and edge cases** — confirmed rejection, exception, fallback, rollback, retry, and partial-success behavior.
@@ -90,23 +97,41 @@ Use the following order, omitting sections that genuinely do not apply:
 
 ## Diagram rules
 
-1. Embed Mermaid directly in `README.md` so it renders with the documentation.
-2. Choose diagrams based on the actual feature:
+1. Every feature MUST produce at least one standalone diagram file under `documentation/<feature-slug>/diagrams/` in addition to any Mermaid diagram embedded in `README.md`. Text-only documentation is not acceptable.
+2. Prefer SVG files. Use PNG/JPG only if SVG generation is genuinely impractical in this environment.
+3. Embed a corresponding Mermaid diagram directly in `README.md` so it renders alongside the prose and is version-control friendly.
+4. Choose diagram types based on the actual feature:
    - `flowchart` for decisions, validation, branching, jobs, and business workflow;
    - `sequenceDiagram` for API/service/database/external call ordering;
    - `stateDiagram-v2` only when the code contains meaningful state transitions.
-3. Every node and arrow must correspond to code-confirmed behavior. Use actual component names or clear business labels backed by code.
-4. Show the meaningful happy path plus important validation/failure branches. Do not clutter diagrams with trivial getters, mappers, logging, or framework plumbing.
-5. Label arrows with meaningful actions or data, especially for async messages, persistence, and external calls.
-6. For a simple feature, use one diagram.
-7. For a complicated feature, create multiple diagrams in the same README rather than one unreadable diagram:
-   - begin with an overview diagram;
-   - follow with focused diagrams for subflows such as validation, persistence, external integration, async processing, or failure handling;
-   - introduce each focused diagram with a sentence linking it to the relevant numbered step in `How it works`;
-   - reuse consistent component names across diagrams.
-8. Keep each diagram readable: target roughly 5–12 meaningful nodes/participants. Split it when branches or participants obscure the primary path.
-9. Do not use decorative diagrams or a generic `Client → Controller → Service → Database` flow unless that is genuinely the complete meaningful behavior.
-10. Validate Mermaid syntax manually before finishing: balanced blocks, valid identifiers, quoted labels where needed, and matching `alt`/`else`/`end` or `subgraph`/`end` structures.
+5. Every node, participant, and arrow must correspond to code-confirmed behavior. Use actual component names or clear business labels backed by code.
+6. Show the meaningful happy path plus the most important validation/failure branches. Do not clutter diagrams with trivial getters, mappers, logging, or framework plumbing.
+7. Label arrows with meaningful actions or data, especially for async messages, persistence, and external calls.
+8. Keep diagrams simple enough for a fresher to follow. If a diagram needs more than about 8–10 nodes/participants to tell its story, split it.
+9. For a simple feature, one overview diagram file is enough.
+10. For a complicated feature, create multiple simplified diagram files under `diagrams/` rather than one crowded diagram. Use numeric prefixes so they appear in reading order:
+    - `01-overview.svg` — the primary happy path and actors;
+    - `02-validation.svg` — input checks and decision rules;
+    - `03-persistence.svg` — database writes/reads and side effects;
+    - `04-error-handling.svg` — key failure branches and responses;
+    - `05-external-integration.svg` — external calls and callbacks (if relevant).
+    Only create files that are genuinely needed for the feature; do not force every template file.
+11. Each standalone diagram should explain one thing clearly. Link related diagrams with short text such as "If validation fails, see `02-validation.svg`".
+12. Introduce every diagram with a short sentence that links it to the corresponding numbered step in `How it works`. Do not dump a diagram without context.
+13. Reuse consistent component names across diagrams so the reader can follow from overview to detail.
+14. Do not use decorative diagrams or a generic `Client → Controller → Service → Database` flow unless that is genuinely the complete meaningful behavior.
+15. Validate Mermaid syntax manually before finishing: balanced blocks, valid identifiers, quoted labels where needed, and matching `alt`/`else`/`end` or `subgraph`/`end` structures.
+16. If a feature naturally separates into distinct phases (for example input validation, core processing, side effects), model each phase explicitly; do not squeeze unrelated concerns into one diagram.
+
+## Generating diagram files
+
+1. Try to generate standalone SVGs from the Mermaid source using a local renderer such as Mermaid CLI (`mmdc`) if it is installed and available:
+   ```bash
+   mmdc -i diagram.mmd -o diagrams/01-overview.svg
+   ```
+2. If `mmdc` or another Mermaid renderer is not available, write a clean, simple SVG by hand. Keep it readable: rectangles/rounded boxes for components, arrows with clear labels, and a short title. Do not produce overly complex hand-written SVG.
+3. If neither automated rendering nor a hand-written SVG is feasible, fall back to a PNG/JPG diagram described in plain text and generated by the simplest practical means. Avoid this fallback unless necessary.
+4. Every SVG/PNG/JPG file must have a matching Mermaid block in `README.md` or a companion `.mmd` file in `diagrams/` so the diagram source remains editable.
 
 ## Evidence and accuracy review
 
@@ -119,4 +144,7 @@ Before writing, maintain a working list of claims and their source files. Before
 5. Remove unrelated architecture details and repetitive prose.
 6. Ensure a non-developer can understand `At a glance` and `How it works` without reading the code.
 7. Ensure a developer can use `Code map` and repository-relative references to find the implementation quickly.
-8. Report the created or updated README path, the resolved entry point, diagrams included, and any material open questions.
+8. Verify that the README contains at least one rendered Mermaid diagram and that each diagram is introduced with context.
+9. Verify that the `diagrams/` folder contains at least one standalone diagram file (SVG preferred) for the feature. For complex features, verify there is an overview diagram plus at least one focused subflow diagram.
+10. Confirm that standalone diagrams are simple enough for a fresher to understand without reading code.
+11. Report the created or updated README path, the resolved entry point, Mermaid diagrams embedded, standalone diagram files created, and any material open questions.
